@@ -481,7 +481,11 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 
 ![GitHub 커밋 이력](evidence/05-github-commits.jpg)
 
-**VS Code GitHub 로그인·저장소 연동 증거**: VS Code Accounts 메뉴와 소스 제어(Source Control) 화면 캡처를 `evidence/`에 추가 예정.
+**VS Code GitHub 로그인 증거**: VS Code 왼쪽 아래 Accounts 메뉴에 `seoldi (GitHub)` 계정이 로그인된 상태로 표시된다.
+
+![VS Code Accounts — GitHub 로그인](evidence/06-vscode-github-account.png)
+
+**VS Code 저장소 연동 증거**: 소스 제어(Source Control) 화면 캡처를 `evidence/`에 추가 예정.
 
 > 토큰·인증 코드는 어디에도 기록하지 않았다. 로그인은 Git for Windows의 Credential Manager(`credential.helper=manager`)가 브라우저 인증으로 처리했다.
 
