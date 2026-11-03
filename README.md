@@ -489,7 +489,7 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 
 ![VS Code 소스 제어 그래프](evidence/07-vscode-source-control-graph.png)
 
-> 토큰·인증 코드는 어디에도 기록하지 않았다. 로그인은 Git for Windows의 Credential Manager(`credential.helper=manager`)가 브라우저 인증으로 처리했다.
+> 토큰·인증 코드는 어디에도 기록하지 않았다. **push 인증 방식은 브라우저 인증**이며, Git for Windows의 Credential Manager(`credential.helper=manager`)가 처리한다. 개인 액세스 토큰(PAT)을 직접 입력하거나 파일에 저장하지 않았다.
 
 **Git vs GitHub**
 - **Git**: 내 컴퓨터에 설치된 프로그램으로, 폴더 안 파일의 버전(commit)을 기록한다. 인터넷이 없어도 동작한다.
@@ -526,6 +526,74 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 - 확인: `docker ps -a`에 `web-test`가 없었다.
 - 해결/대안: `docker run`으로 컨테이너를 만든 뒤 `ps → logs → stats → stop → ps -a → rm` 순서로 다시 실행했다(4-4).
 
+### 문제 5. 포트 충돌 (`port is already allocated`) — 진단과 해제 절차
+이미 `my-web-8080`이 8080을 쓰는 상태에서 같은 포트로 컨테이너를 하나 더 띄워 충돌을 재현하고, 진단 → 해제 순서로 해결했다.
+
+- 문제: 같은 호스트 포트로 컨테이너를 실행하면 실패하고, 컨테이너는 `Created` 상태로 남는다.
+```powershell
+PS> docker run -d -p 8080:80 --name port-conflict nginx:alpine
+f1cb13c26204...
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint port-conflict (...): Bind for 0.0.0.0:8080 failed: port is already allocated
+
+PS> docker ps -a --filter name=port-conflict --format "{{.Names}}  {{.Status}}"
+port-conflict  Created
+```
+- 원인 가설: 호스트의 8080 포트를 다른 프로세스(다른 컨테이너 또는 일반 프로그램)가 이미 점유하고 있다. 호스트 포트는 한 번에 하나만 쓸 수 있다.
+
+**진단 순서 (위에서 아래로)**
+
+| 순서 | 확인할 것 | 명령 |
+|---|---|---|
+| 1 | 오류 메시지에서 충돌한 포트 번호 읽기 | `Bind for 0.0.0.0:8080 failed` → 8080 |
+| 2 | 이 포트를 쓰는 **도커 컨테이너**가 있는지 | `docker ps --filter "publish=8080"` |
+| 3 | 호스트에서 이 포트를 LISTEN 중인 **프로세스(PID)** | `netstat -ano \| findstr ":8080"` 또는 `Get-NetTCPConnection -LocalPort 8080 -State Listen` |
+| 4 | PID가 어떤 프로그램인지 | `Get-Process -Id <PID>` |
+
+```powershell
+PS> docker ps --filter "publish=8080" --format "{{.Names}}  {{.Ports}}"
+my-web-8080  0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+
+PS> netstat -ano | findstr ":8080"
+  TCP    0.0.0.0:8080           0.0.0.0:0              LISTENING       34636
+  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       35972
+  TCP    [::]:8080              [::]:0                 LISTENING       34636
+  TCP    [::1]:8080             [::]:0                 LISTENING       35972
+
+PS> Get-Process -Id 34636,35972 | Select Id,ProcessName
+   Id ProcessName
+   -- -----------
+34636 com.docker.backend
+35972 wslrelay
+```
+- 확인: 2번에서 `my-web-8080` 컨테이너가 8080을 점유하고 있다. 3·4번의 PID 두 개는 각각 `com.docker.backend`와 `wslrelay`로, 둘 다 Docker Desktop(WSL 2)의 포트 전달 프로세스다. 즉 `netstat`만 보면 도커 프로세스 이름만 나오고 **어느 컨테이너인지는 알 수 없다.** 그래서 컨테이너가 의심되면 `docker ps --filter publish=...`를 먼저 본다. 도커와 무관한 일반 프로그램이 점유한 경우에는 3·4번에서 그 프로그램 이름이 나온다.
+
+**해제·해결 방법 (상황별)**
+
+| 상황 | 해결 |
+|---|---|
+| 점유한 쪽이 필요 없는 도커 컨테이너 | `docker stop <이름>` → `docker container remove <이름>` 후 같은 포트로 재실행 |
+| 점유한 쪽이 필요한 컨테이너·프로그램 | **호스트 포트를 바꿔서** 실행 (`-p 8090:80`) |
+| 도커와 무관한 일반 프로그램 | 4번에서 프로그램을 확인해 종료(`Stop-Process -Id <PID>`)하거나 포트를 변경. 시스템·도커 프로세스(`com.docker.backend`, `wslrelay`)는 종료하지 않는다 |
+| 실패하고 남은 `Created` 컨테이너 | `docker container remove <이름>`으로 정리 |
+
+- 해결/대안: 점유 컨테이너(`my-web-8080`)는 증거로 필요해서 종료하지 않고 호스트 포트를 8090으로 바꿨다. 실패한 컨테이너는 정리했다.
+```powershell
+PS> docker container remove port-conflict
+port-conflict
+
+PS> docker run -d -p 8090:80 --name port-8090 nginx:alpine
+af552019c72c...
+
+PS> curl.exe -s -o NUL -w "%{http_code}" http://localhost:8090
+200
+
+PS> docker ps --filter "name=port-8090" --format "{{.Names}}  {{.Ports}}"
+port-8090  0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+
+PS> docker container remove --force port-8090      # 확인 후 정리
+```
+- 교훈: 컨테이너 안의 포트(80)는 모두 같아도 되지만 **호스트 포트(왼쪽)는 겹치면 안 된다.** 컨테이너마다 `8080:80`, `8081:80`, `8082:80`처럼 호스트 포트를 다르게 준다(4-7).
+
 ## 6) 학습 정리
 - **절대/상대 경로**: 절대 경로는 맨 꼭대기(`/` 또는 `D:\`)부터 전부 적는다(`/tmp/perm/file.txt`, `D:\20_Codyssey\10_미션\...`). 상대 경로는 **지금 위치 기준**이다(`./file.txt`, `../dir1`, `practice`). `cd practice`가 되는 것은 지금 위치 아래에 `practice`가 있기 때문이다.
 - **권한 r/w/x · 755/644**: r=읽기(4), w=쓰기(2), x=실행(1)이고, 소유자·그룹·기타 세 자리로 각각 더해서 쓴다. `755`=소유자 rwx, 그룹·기타 r-x. `644`=소유자 rw-, 그룹·기타 r--. 디렉토리의 `x`는 안으로 들어갈 수 있는 권한이다. (4-2)
@@ -533,6 +601,10 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 - **볼륨**: 컨테이너 삭제와 상관없이 데이터를 보존하는, 도커가 관리하는 저장 공간이다. 바인드 마운트는 내 폴더 경로를 연결하고, 볼륨은 이름으로 연결한다. (4-8, 4-9)
 - **Git vs GitHub**: Git은 내 컴퓨터의 버전 기록 프로그램, GitHub는 그 기록을 올려 두고 협업하는 원격 서비스다. (4-10)
 - **COPY vs 바인드 마운트**: `COPY`는 빌드 시 이미지에 복사해 담고(배포용), 바인드 마운트는 같은 폴더를 연결해 수정이 바로 보인다(개발용). (4-6, 4-8)
+- **이미지 변경 후 재배포**: 이미지는 실행해도 바뀌지 않는다. `app/`을 고친 뒤 `COPY` 방식으로 반영하려면 **다시 `docker build`하고, 실행 중인 옛 컨테이너를 지운 뒤 새 이미지로 다시 `docker run`** 해야 한다. 옛 컨테이너는 옛 이미지를 계속 쓰고 있다.
+- **컨테이너 네트워크 타입**: 따로 지정하지 않으면 컨테이너는 기본 `bridge` 네트워크에 붙는다(`docker network ls`에 `bridge`·`host`·`none`이 있다). `bridge`는 컨테이너마다 사설 IP를 주고 격리하므로, 밖에서 접속하려면 포트 매핑이 필요하다. `host`는 호스트 네트워크를 그대로 써서 포트 매핑이 필요 없지만 격리가 약하다.
+- **운영 환경의 영속성**: DB처럼 지워지면 안 되는 데이터는 **볼륨**에 둔다. 컨테이너는 언제든 지우고 새 이미지로 교체할 수 있어야 하므로, 데이터는 컨테이너 밖(볼륨)에 있어야 한다. 소스 코드 편집용 연결은 바인드 마운트가 편하다.
+- **Windows vs Linux 경로 차이**: Windows는 `D:\20_Codyssey\10_미션`(드라이브 문자, `\` 구분), 리눅스(컨테이너)는 `/tmp/perm`(맨 위가 `/`, `/` 구분)이다. bash에서 `\`는 이스케이프 문자라 `cd D:\20_Codyssey`를 치면 `\`가 사라져 `D:20_Codyssey`가 되어 실패한다(5-문제 2). 또 PowerShell 5.x의 `>`는 UTF-16으로 저장해 리눅스에서 인코딩 문제가 날 수 있다(5-문제 3).
 
 ## 7) 검증 방법 및 증거 위치
 | 항목 | 무엇을 확인했나 | 사용한 명령 | 증거 위치 |
@@ -549,7 +621,7 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 | Git·GitHub·VS Code | 설정값, 원격 연결, 로그인·소스 제어 상태 | `git config --list`, `git remote -v`, `git push` | [4-10](#4-10-git--github-연동), `evidence/04-…`~`07-…` |
 
 ## 8) 재현 방법 (평가자용)
-Docker Desktop이 실행 중이면 저장소만 받아 같은 결과를 확인할 수 있다.
+**전제: Docker Desktop이 설치되어 있고 실행 중이어야 한다**(작업 표시줄 고래 아이콘이 멈춘 상태, `docker info`가 Server 항목까지 출력). 이 상태에서 저장소만 받으면 같은 결과를 확인할 수 있다. 포트가 충돌하면 5번 트러블슈팅(문제 5)을 따른다.
 
 ```powershell
 git clone https://github.com/seoldi/codyssey-e1-1-workstation.git
