@@ -473,7 +473,13 @@ origin  https://github.com/seoldi/codyssey-e1-1-workstation.git (push)
 PS> git push
    01859bb..c069ba4  main -> main
 ```
-GitHub 저장소 화면(Public, 토픽 `codyssey`, 커밋 이력): `evidence/` 폴더의 GitHub 화면 캡처 참고.
+GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라우저에서 열어도 **Public**으로 보이고, 토픽 `codyssey`와 파일 목록이 보인다.
+
+![GitHub 저장소 화면](evidence/04-github-repo.jpg)
+
+커밋 이력 (`main` 브랜치, 로컬에서 push한 커밋 3개):
+
+![GitHub 커밋 이력](evidence/05-github-commits.jpg)
 
 **VS Code GitHub 로그인·저장소 연동 증거**: VS Code Accounts 메뉴와 소스 제어(Source Control) 화면 캡처를 `evidence/`에 추가 예정.
 
