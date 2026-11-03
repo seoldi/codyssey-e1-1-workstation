@@ -533,3 +533,50 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 - **볼륨**: 컨테이너 삭제와 상관없이 데이터를 보존하는, 도커가 관리하는 저장 공간이다. 바인드 마운트는 내 폴더 경로를 연결하고, 볼륨은 이름으로 연결한다. (4-8, 4-9)
 - **Git vs GitHub**: Git은 내 컴퓨터의 버전 기록 프로그램, GitHub는 그 기록을 올려 두고 협업하는 원격 서비스다. (4-10)
 - **COPY vs 바인드 마운트**: `COPY`는 빌드 시 이미지에 복사해 담고(배포용), 바인드 마운트는 같은 폴더를 연결해 수정이 바로 보인다(개발용). (4-6, 4-8)
+
+## 7) 검증 방법 및 증거 위치
+| 항목 | 무엇을 확인했나 | 사용한 명령 | 증거 위치 |
+|---|---|---|---|
+| 터미널 조작 | 이동·생성·복사·이름변경·삭제·내용 확인, 숨김 파일 표시 | `pwd`, `ls -Force`, `mkdir`, `cp`, `mv`, `rm`, `cat` | [4-1](#4-1-터미널-조작), `practice/` |
+| 권한 | 변경 전/후 권한 문자열이 달라짐 | `ls -ld`, `chmod 600/700/777`, `stat` | [4-2](#4-2-권한-실습) |
+| Docker 설치·데몬 | 버전과 서버(데몬) 응답 | `docker --version`, `docker info` | [4-3](#4-3-docker-설치점검) |
+| 이미지·컨테이너 운영 | 목록, 로그, 리소스, 중지 상태 구분 | `docker images`, `ps`, `ps -a`, `logs`, `stats` | [4-4](#4-4-docker-운영) |
+| hello-world · ubuntu | 설치 정상 메시지, 컨테이너 내부 명령, exec/종료 차이 | `docker run hello-world`, `docker run -it ubuntu bash`, `docker exec` | [4-5](#4-5-컨테이너-실행-실습) |
+| 커스텀 이미지 | 빌드 성공, 라벨·환경변수 적용 | `docker build`, `docker image inspect` | [4-6](#4-6-커스텀-이미지-dockerfile), `Dockerfile`, `app/` |
+| 포트 매핑 | 두 포트(8080, 8081)에서 HTTP 200 | `docker run -p`, `curl.exe -i` | [4-7](#4-7-포트-매핑), `evidence/01-port-8080-browser.png` |
+| 바인드 마운트 | 호스트 수정이 재빌드 없이 반영, COPY 방식은 그대로 | `docker run -v 경로:경로`, `docker inspect`, `curl.exe` | [4-8](#4-8-바인드-마운트), `evidence/02-…`, `03-…` |
+| 볼륨 영속성 | 컨테이너 삭제 후에도 데이터 유지, 볼륨 없으면 소실 | `docker volume create`, `docker run -v 이름:경로`, `docker rm -f` | [4-9](#4-9-볼륨-영속성) |
+| Git·GitHub·VS Code | 설정값, 원격 연결, 로그인·소스 제어 상태 | `git config --list`, `git remote -v`, `git push` | [4-10](#4-10-git--github-연동), `evidence/04-…`~`07-…` |
+
+## 8) 재현 방법 (평가자용)
+Docker Desktop이 실행 중이면 저장소만 받아 같은 결과를 확인할 수 있다.
+
+```powershell
+git clone https://github.com/seoldi/codyssey-e1-1-workstation.git
+cd codyssey-e1-1-workstation
+
+# 4-6, 4-7: 이미지 빌드 후 포트 매핑 접속
+docker build -t my-web:1.0 .
+docker run -d -p 8080:80 --name my-web-8080 my-web:1.0
+curl.exe -i http://localhost:8080        # HTTP/1.1 200 OK, 브라우저는 http://localhost:8080
+
+# 4-8: 바인드 마운트 (app/index.html을 고치면 재빌드 없이 반영)
+docker run -d -p 8082:80 --name my-web-mount -v "${PWD}/app:/usr/share/nginx/html" nginx:alpine
+
+# 4-9: 볼륨 영속성
+docker volume create mydata
+docker run -d --name vol-test -v mydata:/data ubuntu sleep infinity
+docker exec vol-test bash -c "echo 'hi volume' > /data/hello.txt"
+docker rm -f vol-test
+docker run --rm -v mydata:/data ubuntu cat /data/hello.txt   # hi volume
+
+# 정리
+docker rm -f my-web-8080 my-web-mount
+docker volume rm mydata
+```
+
+**개인 PC에 묶인 부분 / 주의**
+- 로그의 경로(`D:\20_Codyssey\10_미션\E1-1_workstation`)와 한글 폴더명(`10_미션`)은 내 PC 기준이다. 어디에 clone해도 된다.
+- 명령은 Windows PowerShell 기준이다(`${PWD}`, `curl.exe`). macOS/Linux bash에서는 `${PWD}` 대신 `$(pwd)`, `curl.exe` 대신 `curl`을 쓴다.
+- 포트 8080·8081·8082가 이미 쓰이고 있으면 `-p` 앞쪽 숫자를 다른 포트로 바꾼다.
+- 권한 실습(4-2)은 `ubuntu` 컨테이너 안에서 하므로 `docker run -it ubuntu bash`로 들어가 같은 명령을 실행하면 된다.
