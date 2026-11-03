@@ -35,7 +35,7 @@
 - [x] 포트 매핑 접속
 - [x] 바인드 마운트 반영
 - [x] 볼륨 영속성
-- [ ] Git 설정 + VS Code GitHub 연동
+- [x] Git 설정 + VS Code GitHub 연동
 
 ## 4) 수행 로그 및 검증
 ### 4-1 터미널 조작
@@ -485,7 +485,9 @@ GitHub 저장소 화면 — 로그아웃 상태(우측 상단 Sign in)의 브라
 
 ![VS Code Accounts — GitHub 로그인](evidence/06-vscode-github-account.png)
 
-**VS Code 저장소 연동 증거**: 소스 제어(Source Control) 화면 캡처를 `evidence/`에 추가 예정.
+**VS Code 저장소 연동 증거**: 소스 제어(Source Control) 패널의 그래프 화면이다. 현재 브랜치 `main`과 원격(구름 아이콘, `origin/main`)이 같은 커밋 위치에 있고, 터미널에서 push한 커밋 이력이 그대로 보인다. 즉 VS Code가 이 폴더를 GitHub 원격 저장소와 연결된 저장소로 인식하고 있다.
+
+![VS Code 소스 제어 그래프](evidence/07-vscode-source-control-graph.png)
 
 > 토큰·인증 코드는 어디에도 기록하지 않았다. 로그인은 Git for Windows의 Credential Manager(`credential.helper=manager`)가 브라우저 인증으로 처리했다.
 
